@@ -90,7 +90,6 @@ beforeAll(async () => {
   updateJar(loginRes);
   accessToken = parse(loginRes).accessToken;
 });
-
 afterAll(async () => {
   await resetSeededAdminPassword();
   await app.close();
