@@ -5,4 +5,4 @@ scrape_configs:
     static_configs:
       - targets: ['host.docker.internal:5000']
     authorization:
-      credentials: 'intops-metrics-9f3a7c2e1b'
+      credentials: 'replace-with-a-long-random-secret'

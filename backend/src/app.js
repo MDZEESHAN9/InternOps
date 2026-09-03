@@ -35,18 +35,14 @@ const app = Fastify({
 app.get(
   '/metrics',
   {
-    preHandler: [
-      auth,
-      rbac('ADMIN'),
-      async (req, reply) => {
-        const authHeader = req.headers.authorization;
-        const expectedToken = `Bearer ${process.env.METRICS_TOKEN}`;
+    preHandler: async (req, reply) => {
+      const authHeader = req.headers.authorization;
+      const expectedToken = `Bearer ${process.env.METRICS_TOKEN}`;
 
-        if (authHeader !== expectedToken) {
-          return reply.status(404).send();
-        }
-      },
-    ],
+      if (!process.env.METRICS_TOKEN || authHeader !== expectedToken) {
+        return reply.status(404).send();
+      }
+    },
     config: {
       rateLimit: false,
     },

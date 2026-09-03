@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../lib/axios';
 import useAuthStore from '../store/auth';
-import { Users } from 'lucide-react';
+import { LayoutGrid, Table2, Users } from 'lucide-react';
 import CustomSelect from '../components/CustomSelect';
 import CustomDatePicker from '../components/CustomDatePicker';
 import { ApiErrorState } from '../components/ui';
@@ -1557,25 +1557,33 @@ export default function Team() {
 
         <div className="flex rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900 shadow-sm">
           <button
+            type="button"
             onClick={() => setView('table')}
-            className={`px-4 py-3 text-sm font-bold transition ${
+            aria-label="Table view"
+            aria-pressed={view === 'table'}
+            title="Table view"
+            className={`p-3 transition ${
               view === 'table'
                 ? 'bg-indigo-600 text-white'
                 : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            Table
+            <Table2 className="w-5 h-5" aria-hidden="true" />
           </button>
 
           <button
+            type="button"
             onClick={() => setView('cards')}
-            className={`px-4 py-3 text-sm font-bold transition ${
+            aria-label="Cards view"
+            aria-pressed={view === 'cards'}
+            title="Cards view"
+            className={`p-3 transition ${
               view === 'cards'
                 ? 'bg-indigo-600 text-white'
                 : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
             }`}
           >
-            Cards
+            <LayoutGrid className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
       </div>
