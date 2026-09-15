@@ -12,11 +12,11 @@ import {
   X,
 } from 'lucide-react';
 import api from '../../lib/axios';
-import useAuthStore from '../../store/auth';
 import CustomSelect from '../CustomSelect';
 
 const ROLE_OPTIONS = [
   { value: '', label: 'Select Role' },
+  { value: 'SENIOR_TL', label: 'Senior TL' },
   { value: 'TL', label: 'TL' },
   { value: 'CAPTAIN', label: 'Captain' },
   { value: 'INTERN', label: 'Intern' },
@@ -32,15 +32,6 @@ const LABELS = {
 };
 
 export default function CreateUserModal({ open, onClose }) {
-  const currentUser = useAuthStore((state) => state.user);
-  const isAdmin = currentUser?.role === 'ADMIN';
-  const allowedRoleOptions = isAdmin
-    ? ROLE_OPTIONS
-    : ROLE_OPTIONS.filter((option) =>
-        currentUser?.role === 'SENIOR_TL'
-          ? ['TL', 'CAPTAIN', 'INTERN'].includes(option.value)
-          : ['CAPTAIN', 'INTERN'].includes(option.value)
-      );
   const queryClient = useQueryClient();
   const [full_name, setfull_name] = useState('');
   const [email, setEmail] = useState('');
@@ -56,10 +47,6 @@ export default function CreateUserModal({ open, onClose }) {
     if (!open) return undefined;
 
     document.body.classList.add('modal-open');
-
-    if (!isAdmin && currentUser?.departmentId) {
-      setDepartmentId(currentUser.departmentId);
-    }
 
     return () => {
       document.body.classList.remove('modal-open');
@@ -123,7 +110,7 @@ export default function CreateUserModal({ open, onClose }) {
     })),
   ];
 
-  const showManagerSelection = ['INTERN', 'CAPTAIN'].includes(role);
+  const showManagerSelection = ['INTERN', 'CAPTAIN', 'TL'].includes(role);
 
   // Register mutation
   const registerMutation = useMutation({
@@ -177,9 +164,7 @@ export default function CreateUserModal({ open, onClose }) {
       email,
       password,
       role,
-      departmentId: isAdmin
-        ? departmentId || undefined
-        : currentUser?.departmentId,
+      departmentId: departmentId || undefined,
       managerId: managerId || undefined,
     };
 
@@ -196,11 +181,11 @@ export default function CreateUserModal({ open, onClose }) {
 
   const modal = (
     <div
-      className="internops-modal-backdrop fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-slate-950/60 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-fade-in"
       onClick={handleClose}
     >
       <div
-        className="internops-modal-panel w-full max-w-3xl max-h-[calc(100vh-2rem)] rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl animate-scale-up text-slate-900 dark:text-white overflow-hidden flex flex-col"
+        className="w-full max-w-3xl max-h-[88vh] rounded-3xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl animate-scale-up text-slate-900 dark:text-white overflow-hidden flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -269,7 +254,6 @@ export default function CreateUserModal({ open, onClose }) {
                   <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                   <input
                     type="email"
-                    maxLength={254}
                     required
                     placeholder="johndoe@company.com"
                     value={email}
@@ -286,7 +270,6 @@ export default function CreateUserModal({ open, onClose }) {
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-slate-500" />
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    maxLength={128}
                     required
                     placeholder="Minimum 8 characters"
                     value={password}
@@ -320,7 +303,7 @@ export default function CreateUserModal({ open, onClose }) {
                       setRole(value);
                       setManagerId(''); // Reset manager on role change
                     }}
-                    options={allowedRoleOptions}
+                    options={ROLE_OPTIONS}
                     placeholder="Select Role"
                     disabled={registerMutation.isPending}
                     className="[&>button]:pl-11"
@@ -338,8 +321,8 @@ export default function CreateUserModal({ open, onClose }) {
                     value={departmentId}
                     onChange={setDepartmentId}
                     options={departmentOptions}
-                    disabled={!isAdmin || registerMutation.isPending}
                     placeholder="Select Dept"
+                    disabled={registerMutation.isPending}
                     className="[&>button]:pl-11"
                   />
                 </div>

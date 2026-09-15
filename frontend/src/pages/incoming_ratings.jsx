@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from 'react';
-import { resolveUploadUrl } from '../lib/uploadUrl';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -63,7 +62,7 @@ function initials(m) {
 function Avatar({ m, size = 'w-10 h-10' }) {
   return m?.avatar_url ? (
     <img
-      src={resolveUploadUrl(m.avatar_url)}
+      src={m.avatar_url}
       alt=""
       className={`${size} rounded-2xl object-cover border border-slate-200 dark:border-slate-700 shadow-sm`}
     />
@@ -78,13 +77,13 @@ function Avatar({ m, size = 'w-10 h-10' }) {
 
 function Stars({ value }) {
   if (value == null || value === '') {
-    return <span className="text-slate-400 dark:text-slate-500">-</span>;
+    return <span className="text-slate-400 dark:text-slate-500">â€”</span>;
   }
 
   const raw = Number(value);
 
   if (Number.isNaN(raw)) {
-    return <span className="text-slate-400 dark:text-slate-500">-</span>;
+    return <span className="text-slate-400 dark:text-slate-500">â€”</span>;
   }
 
   // Ratings are stored out of 10. Convert to 5-star visual safely.
@@ -99,9 +98,9 @@ function Stars({ value }) {
       className="inline-flex items-center gap-2"
     >
       <span className="inline-flex items-center gap-0.5 text-amber-500 text-base tracking-widest drop-shadow-sm">
-        <span>{'★'.repeat(full)}</span>
+        <span>{'â˜…'.repeat(full)}</span>
         <span className="text-slate-300 dark:text-slate-700">
-          {'★'.repeat(empty)}
+          {'â˜…'.repeat(empty)}
         </span>
       </span>
 
@@ -118,7 +117,7 @@ function getEligibility(avgRating) {
       status: 'UNRATED',
       badge:
         'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
-      label: 'No Rating',
+      label: 'âšª No Rating',
     };
   }
 
@@ -128,7 +127,7 @@ function getEligibility(avgRating) {
       status: 'UNRATED',
       badge:
         'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700',
-      label: 'No Rating',
+      label: 'âšª No Rating',
     };
   }
 
@@ -138,7 +137,7 @@ function getEligibility(avgRating) {
       status: 'NOT_ELIGIBLE',
       badge:
         'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border border-red-200 dark:border-red-900/60 font-extrabold',
-      label: 'Not Eligible',
+      label: 'ðŸ”´ Not Eligible',
     };
   }
 
@@ -146,7 +145,7 @@ function getEligibility(avgRating) {
     status: 'ELIGIBLE',
     badge:
       'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/60 font-extrabold',
-    label: 'Eligible',
+    label: 'ðŸŸ¢ Eligible',
   };
 }
 
@@ -180,8 +179,6 @@ export default function Ratings({
   deptId: propDeptId,
   roster = [],
 } = {}) {
-  const hydrated = useAuthStore((s) => s.hydrated);
-  const accessToken = useAuthStore((s) => s.accessToken);
   const { deptId: routeDeptId } = useParams();
   const deptId = propDeptId || routeDeptId;
   const user = useAuthStore((s) => s.user);
@@ -248,7 +245,7 @@ export default function Ratings({
   const { data: departments = [] } = useQuery({
     queryKey: ['departments'],
     queryFn: () => api.get('/departments').then((res) => res.data),
-    enabled: hydrated && !!accessToken && isManager && !isProjectView,
+    enabled: isManager && !isProjectView,
   });
 
   const {
@@ -274,7 +271,7 @@ export default function Ratings({
   } = useQuery({
     queryKey: ['ratings', viewUserId],
     queryFn: () => api.get(`/ratings/${viewUserId}`).then((res) => res.data),
-    enabled: hydrated && !!accessToken && !!viewUserId && !viewAll,
+    enabled: !!viewUserId && !viewAll,
   });
 
   const handleViewDepartmentChange = (dId) => {
@@ -336,8 +333,8 @@ export default function Ratings({
 
   const eligibilityFilterOptions = [
     { value: '', label: 'All Eligibility' },
-    { value: 'ELIGIBLE', label: 'Eligible' },
-    { value: 'NOT_ELIGIBLE', label: 'Not Eligible' },
+    { value: 'ELIGIBLE', label: 'ðŸŸ¢ Eligible' },
+    { value: 'NOT_ELIGIBLE', label: 'ðŸ”´ Not Eligible' },
   ];
 
   // Base list of team members / roster
@@ -455,7 +452,7 @@ export default function Ratings({
   }, [baseMembers, search, statusFilter, ratingFilter, eligibilityFilter]);
 
   return (
-    <div className="">
+    <div className="animate-fade-in-up">
       {/* Admin Department Navigation Context Banner */}
       {isAdmin && activeDeptId && !isProjectView && (
         <div className="mb-6 p-4 rounded-3xl bg-gradient-to-r from-slate-900 to-indigo-950 text-white shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border border-indigo-500/20 animate-fade-in">
@@ -565,7 +562,7 @@ export default function Ratings({
           />
           <StatCard
             label="Avg Rating"
-            value={stats.avgScore ? `${stats.avgScore}` : '-'}
+            value={stats.avgScore ? `${stats.avgScore}` : 'â€”'}
             sub="out of 10"
             icon={<Star className="w-4 h-4 text-amber-500" />}
           />
@@ -680,7 +677,7 @@ export default function Ratings({
                             <Avatar m={m} />
                             <div>
                               <div className="font-extrabold text-slate-900 dark:text-white">
-                                {m.full_name || '-'}
+                                {m.full_name || 'â€”'}
                               </div>
                               <div className="text-xs text-slate-500 dark:text-slate-400">
                                 {m.email}
@@ -700,7 +697,7 @@ export default function Ratings({
                         </td>
 
                         <td className="p-4 text-slate-700 dark:text-slate-300 font-medium">
-                          {m.department_name || '-'}
+                          {m.department_name || 'â€”'}
                         </td>
 
                         <td className="p-4">
@@ -780,8 +777,8 @@ export default function Ratings({
                     </div>
 
                     <div className="text-xs text-slate-500 dark:text-slate-400 space-y-1 mb-4">
-                      <p>Department: {m.department_name || 'No department'}</p>
-                      <p>Status: {m.internship_status || 'ACTIVE'}</p>
+                      <p>ðŸ¢ {m.department_name || 'No department'}</p>
+                      <p>ðŸ“Œ Status: {m.internship_status || 'ACTIVE'}</p>
                     </div>
 
                     <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
@@ -834,7 +831,7 @@ export default function Ratings({
                   </div>
                   <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">
                     avg of {ratings?.length || 0}{' '}
-                    {ratings?.length === 1 ? 'rating' : 'ratings'} - out of 10
+                    {ratings?.length === 1 ? 'rating' : 'ratings'} Â· out of 10
                   </div>
                 </div>
               </div>

@@ -2,7 +2,6 @@
 const rbac = require('../../middleware/rbac');
 const repo = require('./repository');
 const service = require('./service');
-const { checkHierarchyAccess } = require('../../utils/hierarchy');
 const { z } = require('zod');
 
 const teamQuerySchema = z.object({
@@ -12,26 +11,20 @@ const teamQuerySchema = z.object({
 
 const fullTeamQuerySchema = z.object({
   managerId: z.string().uuid(),
-  page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(10),
 });
 
 async function routes(fastify) {
   fastify.get(
     '/full-team',
     {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL')],
+      preHandler: [auth, rbac('ADMIN')],
       schema: {
         tags: ['Hierarchy'],
         description: 'Get full team for a specific manager',
         querystring: {
           type: 'object',
           required: ['managerId'],
-          properties: {
-            managerId: { type: 'string', format: 'uuid' },
-            page: { type: 'integer', minimum: 1, default: 1 },
-            limit: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
-          },
+          properties: { managerId: { type: 'string', format: 'uuid' } },
         },
       },
     },
@@ -44,22 +37,7 @@ async function routes(fastify) {
         });
       }
 
-      if (req.user.role !== 'ADMIN') {
-        const allowed = await checkHierarchyAccess(
-          req.user.id,
-          parsed.data.managerId
-        );
-        if (!allowed) {
-          return reply.status(403).send({
-            error: 'Forbidden',
-            message:
-              'Requested manager is outside your permitted hierarchy or department',
-          });
-        }
-      }
-
-      const { managerId, page, limit } = parsed.data;
-      const result = await service.getFullTeam(managerId, { page, limit });
+      const result = await service.getFullTeam(parsed.data.managerId);
       return {
         data: result.rows,
         total: result.total,

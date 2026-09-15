@@ -10,7 +10,6 @@ import {
   Users,
 } from 'lucide-react';
 import { Card } from '../../components/ui';
-import { useRouteInitialLoading } from '../../components/loading/RouteInitialLoading';
 import CustomDatePicker from '../../components/CustomDatePicker';
 import api from '../../lib/axios';
 
@@ -49,7 +48,6 @@ const EXPORTS = [
 
 export default function Exports() {
   const [departments, setDepartments] = useState([]);
-  const [departmentsLoading, setDepartmentsLoading] = useState(true);
   const [selectedDepartment, setSelectedDepartment] = useState('');
 
   const [from, setFrom] = useState('');
@@ -67,15 +65,11 @@ export default function Exports() {
       } catch (err) {
         console.error('DEPARTMENT API ERROR:', err);
         setError('Failed to load departments');
-      } finally {
-        setDepartmentsLoading(false);
       }
     };
 
     fetchDepartments();
   }, []);
-  useRouteInitialLoading(departmentsLoading);
-
   const download = async (endpoint, requiresDates) => {
     setError('');
 
@@ -119,7 +113,7 @@ export default function Exports() {
   };
 
   return (
-    <div>
+    <div className="animate-fade-in-up">
       {/* Professional Header Block */}
       <div className="mb-7 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">

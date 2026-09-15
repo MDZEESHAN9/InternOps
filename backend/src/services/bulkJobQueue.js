@@ -1,50 +1,79 @@
 const { Queue, Worker } = require('bullmq');
-const config = require('../config');
 const logger = require('../logger');
 const repo = require('../modules/certificates/repository');
 
 const QUEUE_NAME = 'bulk-certificate-generation';
 
 /**
- * Build BullMQ's connection from the same normalized Redis configuration used
- * by the rest of the backend. This keeps REDIS_URL, REDIS_HOST, and Upstash
- * configuration behavior consistent.
+ * Build BullMQ Redis connection from REDIS_URL.
+ *
+ * Render Key Value/Redis:
+ *   redis://...
+ *
+ * TLS Redis:
+ *   rediss://...
+ *
+ * BullMQ requires maxRetriesPerRequest to be null.
  */
 function getRedisConnection() {
-  const redisConfig = config.redis;
+  const redisUrl = process.env.REDIS_URL;
 
-  if (!redisConfig?.enabled || !redisConfig.host) {
+  if (!redisUrl) {
     logger.warn(
-      'Redis is not configured. BullMQ will run in direct-execution mode.'
+      'REDIS_URL is not configured. BullMQ will run in direct-execution mode.'
     );
     return null;
   }
 
-  const connection = {
-    host: redisConfig.host,
-    port: redisConfig.port || 6379,
-    username: redisConfig.username || 'default',
-    password: redisConfig.password || undefined,
-    db: redisConfig.database || 0,
-    tls: redisConfig.tls ? {} : undefined,
-    maxRetriesPerRequest: null,
-    enableOfflineQueue: false,
-    retryStrategy(times) {
-      return times > 2 ? null : 200;
-    },
-  };
+  try {
+    const url = new URL(redisUrl);
 
-  logger.info(
-    {
-      host: connection.host,
-      port: connection.port,
-      tls: Boolean(connection.tls),
-      source: redisConfig.source,
-    },
-    'Redis connection configured for BullMQ'
-  );
+    const connection = {
+      host: url.hostname,
+      port: Number(url.port) || 6379,
 
-  return connection;
+      username: url.username ? decodeURIComponent(url.username) : undefined,
+
+      password: url.password ? decodeURIComponent(url.password) : undefined,
+
+      // rediss:// = TLS
+      tls: url.protocol === 'rediss:' ? {} : undefined,
+
+      // Required by BullMQ for workers
+      maxRetriesPerRequest: null,
+
+      // Don't keep requests queued while Redis is unavailable
+      enableOfflineQueue: false,
+
+      retryStrategy(times) {
+        if (times > 2) {
+          return null;
+        }
+
+        return 200;
+      },
+    };
+
+    logger.info(
+      {
+        host: connection.host,
+        port: connection.port,
+        tls: Boolean(connection.tls),
+      },
+      'Redis connection configured for BullMQ'
+    );
+
+    return connection;
+  } catch (err) {
+    logger.warn(
+      {
+        err: err?.message || err,
+      },
+      'Invalid REDIS_URL. BullMQ will run in direct-execution mode.'
+    );
+
+    return null;
+  }
 }
 
 class BulkJobQueueService {
@@ -53,7 +82,6 @@ class BulkJobQueueService {
     this.worker = null;
     this.connection = null;
     this.isBullMQActive = false;
-    this.initialized = false;
   }
 
   async init() {
@@ -62,12 +90,7 @@ class BulkJobQueueService {
 
       const bullmqEnabled = process.env.BULLMQ_ENABLED !== 'false';
 
-      if (
-        this.connection &&
-        config.redis.available &&
-        process.env.NODE_ENV !== 'test' &&
-        bullmqEnabled
-      ) {
+      if (this.connection && process.env.NODE_ENV !== 'test' && bullmqEnabled) {
         /*
          * Create BullMQ Queue
          */
@@ -195,10 +218,6 @@ class BulkJobQueueService {
           logger.info(
             'Redis not configured. Running queue service in direct mode.'
           );
-        } else if (!config.redis.available) {
-          logger.warn(
-            'Redis unavailable. Running queue service in direct mode.'
-          );
         } else {
           logger.info(
             'BullMQ is disabled in test environment. Running queue service in direct mode.'
@@ -232,16 +251,7 @@ class BulkJobQueueService {
           'Failed to recover pending bulk jobs'
         );
       });
-    } finally {
-      this.initialized = true;
     }
-  }
-
-  getStatus() {
-    return {
-      mode: this.isBullMQActive ? 'bullmq' : 'direct',
-      initialized: this.initialized,
-    };
   }
 
   /**

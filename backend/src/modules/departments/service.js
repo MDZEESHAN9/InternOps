@@ -1,33 +1,17 @@
-const repo = require('./repository');
-const { MAX_HIERARCHY_ROWS } = require('../../utils/hierarchy');
+﻿const repo = require('./repository');
 
-function normalizeHierarchyLimit(limit) {
-  const parsed = Number(limit);
-
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return MAX_HIERARCHY_ROWS;
-  }
-
-  return Math.min(Math.trunc(parsed), MAX_HIERARCHY_ROWS);
+async function createDepartment(name, createdBy) {
+  // Normalize input at service layer as well to ensure callers that
+  // use the service (instead of repository) get trimmed values.
+  const sanitizedName = name ? name.trim() : name;
+  return repo.createDepartment(sanitizedName, createdBy);
 }
 
-async function getDepartmentTeams(departmentId, options = {}) {
-  return repo.getDepartmentTeams(departmentId, {
-    hierarchyLimit: normalizeHierarchyLimit(options.hierarchyLimit),
-  });
+async function getDepartmentTeams(departmentId) {
+  return repo.getDepartmentTeams(departmentId);
 }
-async function handoverSeniorTl(data) {
-  return repo.handoverSeniorTl(
-    data.departmentId,
-    data.outgoingLeadId,
-    data.replacementId,
-    data.outgoingRole,
-    data.actorId,
-    data.suspendOutgoing
-  );
-}
+
 module.exports = {
+  createDepartment,
   getDepartmentTeams,
-  handoverSeniorTl,
-  normalizeHierarchyLimit,
 };

@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { clearCsrfToken, registerAuthStore } from '../lib/axios';
-import { clearSentryUser, setSentryUser } from '../lib/sentry';
 
 // Hydrate from localStorage so a refresh keeps the session.
 // We defer the read so it always runs inside a browser context and
@@ -107,9 +106,6 @@ const useAuthStore = create((set) => ({
   hydrated: false,
   storageError: hasStorageError,
   systemError: null,
-  impersonation: null,
-  adminSession: null,
-  authGeneration: 0,
 
   setAuth: ({ accessToken, user }) =>
     set((prev) => {
@@ -126,10 +122,8 @@ const useAuthStore = create((set) => ({
       if (user !== undefined) {
         if (user === null) {
           safeSet('user', null);
-          clearSentryUser();
         } else {
           safeSet('user', JSON.stringify(user));
-          setSentryUser(user);
         }
       }
 
@@ -137,24 +131,9 @@ const useAuthStore = create((set) => ({
         accessToken: nextToken,
         user: nextUser,
         storageError: hasStorageError,
-        authGeneration: prev.authGeneration + 1,
       };
     }),
 
-  startImpersonation: ({ accessToken, user, impersonation }) =>
-    set((state) => ({
-      accessToken,
-      user,
-      impersonation,
-      adminSession: { accessToken: state.accessToken, user: state.user },
-    })),
-  exitImpersonation: () =>
-    set((state) => ({
-      accessToken: state.adminSession?.accessToken || null,
-      user: state.adminSession?.user || null,
-      impersonation: null,
-      adminSession: null,
-    })),
   setHydrated: () => set({ hydrated: true }),
 
   setSystemError: (message) => set({ systemError: message }),
@@ -164,15 +143,7 @@ const useAuthStore = create((set) => ({
     safeRemove('accessToken');
     safeSet('user', null);
     clearCsrfToken();
-    clearSentryUser();
-    set({
-      accessToken: null,
-      user: null,
-      impersonation: null,
-      adminSession: null,
-      storageError: hasStorageError,
-      authGeneration: useAuthStore.getState().authGeneration + 1,
-    });
+    set({ accessToken: null, user: null, storageError: hasStorageError });
   },
 }));
 

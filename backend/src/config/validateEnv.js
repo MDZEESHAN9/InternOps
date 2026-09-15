@@ -2,19 +2,7 @@ const { z } = require('zod');
 
 const REQUIRED_VARS = ['JWT_SECRET', 'DATABASE_URL', 'NODE_ENV'];
 
-const OPTIONAL_VARS = ['GOOGLE_CLIENT_ID', 'EMAIL_API_KEY'];
-
-function hasRedisConfiguration(env = process.env) {
-  const hasValue = (value) =>
-    value !== undefined && value !== null && String(value).trim() !== '';
-
-  return Boolean(
-    hasValue(env.REDIS_URL) ||
-    hasValue(env.REDIS_HOST) ||
-    (hasValue(env.UPSTASH_REDIS_REST_URL) &&
-      hasValue(env.UPSTASH_REDIS_REST_TOKEN))
-  );
-}
+const OPTIONAL_VARS = ['REDIS_URL', 'GOOGLE_CLIENT_ID', 'EMAIL_API_KEY'];
 
 const envSchema = z.object({
   PORT: z.string().regex(/^\d+$/, 'PORT must be a valid integer').optional(),
@@ -38,10 +26,6 @@ const envSchema = z.object({
     .string()
     .regex(/^\d+$/, 'PASSWORD_RESET_HOURLY_MAX must be a valid integer')
     .optional(),
-  COOKIE_SECURE: z.enum(['true', 'false']).optional(),
-  COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).optional(),
-  CORS_ORIGIN: z.string().url().optional(),
-  APP_URL: z.string().url().optional(),
 });
 
 function validateEnv() {
@@ -77,12 +61,6 @@ function validateEnv() {
     if (val === undefined || val === null || String(val).trim() === '') {
       missingOptional.push(key);
     }
-  }
-
-  if (!hasRedisConfiguration(process.env)) {
-    missingOptional.unshift(
-      'REDIS_URL (or REDIS_HOST / complete Upstash credentials)'
-    );
   }
 
   if (missingOptional.length > 0) {
@@ -139,4 +117,3 @@ function validateEnv() {
 }
 
 module.exports = validateEnv;
-module.exports.hasRedisConfiguration = hasRedisConfiguration;

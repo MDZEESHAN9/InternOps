@@ -7,7 +7,6 @@ const {
   mergeCookies,
 } = require('./helpers');
 const { generateAccessToken } = require('../../src/utils/tokens');
-const pool = require('../../src/config/db');
 
 describe('UptoSkills Integration Tests', () => {
   let csrfToken;
@@ -63,14 +62,10 @@ describe('UptoSkills Integration Tests', () => {
     });
 
     it('should forbid authenticated non-admin users', async () => {
-      const { rows } = await pool.query(
-        `INSERT INTO users (email, password_hash, role, suspended, must_change_password)
-         VALUES ($1, 'pwd', 'INTERN', FALSE, FALSE)
-         RETURNING id, role`,
-        [`uptoskills-intern-${Date.now()}@test.local`]
-      );
-      const intern = rows[0];
-      const internToken = generateAccessToken(intern);
+      const internToken = generateAccessToken({
+        id: '00000000-0000-4000-8000-000000000002',
+        role: 'INTERN',
+      });
       const res = await app.inject({
         method: 'GET',
         url: '/api/v1/uptoskills/sync-status',
@@ -79,7 +74,6 @@ describe('UptoSkills Integration Tests', () => {
 
       expect(res.statusCode).toBe(403);
       expect(JSON.parse(res.body)).toEqual({ error: 'Forbidden' });
-      await pool.query('DELETE FROM users WHERE id = $1', [intern.id]);
     });
 
     it('should return 501 Not Implemented', async () => {

@@ -1,22 +1,9 @@
-describe('notification message normalization', () => {
-  it('repairs the known historical warning prefix without changing valid text', () => {
-    const legacyMessage = `${String.fromCharCode(226, 353, 160, 239, 184, 143)} User Issue`;
-    expect(normalizeNotificationMessage(legacyMessage)).toBe('⚠️ User Issue');
-    expect(normalizeNotificationMessage('Normal notification')).toBe(
-      'Normal notification'
-    );
-  });
-});
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import Notifications, {
-  normalizeNotificationMessage,
-  parseLoginFailureNotification,
-} from '../pages/Notifications';
+import Notifications from '../pages/Notifications';
 import api from '../lib/axios';
-import useAuthStore from '../store/auth';
 
 vi.mock('../lib/axios', () => ({
   default: {
@@ -25,9 +12,7 @@ vi.mock('../lib/axios', () => ({
     post: vi.fn(),
     delete: vi.fn(),
   },
-  registerAuthStore: vi.fn(),
 }));
-vi.mock('../store/auth');
 
 function createTestQueryClient() {
   return new QueryClient({
@@ -39,27 +24,9 @@ function createTestQueryClient() {
   });
 }
 
-describe('login-failure notification presentation', () => {
-  it('shows the full account and removes the embedded timestamp', () => {
-    expect(
-      parseLoginFailureNotification(
-        'User Issue: Login Failed User: person@example.com Issue: Invalid password Time: now'
-      )
-    ).toEqual({
-      title: 'Login attempt failed',
-      description:
-        'An unsuccessful sign-in attempt was detected for an account.',
-      account: 'person@example.com',
-      reason: 'Invalid password',
-    });
-  });
-});
 describe('Notifications Page Optimistic UI Updates', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    useAuthStore.mockImplementation((selector) =>
-      selector({ hydrated: true, accessToken: 'test-access-token' })
-    );
   });
 
   it('immediately updates marked notification to read state in the UI (optimistic update)', async () => {
@@ -105,7 +72,7 @@ describe('Notifications Page Optimistic UI Updates', () => {
     expect(screen.getByText('Second unread alert')).toBeInTheDocument();
 
     const markReadButtons = screen.getAllByRole('button', {
-      name: /mark as read/i,
+      name: /mark read/i,
     });
     expect(markReadButtons).toHaveLength(2);
 
@@ -115,7 +82,7 @@ describe('Notifications Page Optimistic UI Updates', () => {
     // First button should be instantly removed from the DOM because the notification is updated to read
     await waitFor(() => {
       const remainingButtons = screen.queryAllByRole('button', {
-        name: /mark as read/i,
+        name: /mark read/i,
       });
       expect(remainingButtons).toHaveLength(1);
     });

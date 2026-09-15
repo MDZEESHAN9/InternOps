@@ -13,7 +13,6 @@ const pLimit = require('p-limit');
 const { fetchProofContent } = require('../social-tasks/crawler.service');
 const { verifyClaim } = require('../social-tasks/ai-verify.service');
 const { checkHierarchyAccess } = require('../../utils/hierarchy');
-const verificationService = require('./verification.service');
 
 async function routes(fastify) {
   // Submit proof (intern only)
@@ -53,72 +52,7 @@ async function routes(fastify) {
     }
   );
 
-  // Handler for reviewer "verify now" / ai-verify trigger
-  const handleTriggerVerification = async (req, reply) => {
-    try {
-      const proof = await repo.getProof(req.params.id);
-
-      if (!proof) {
-        return reply.status(404).send({
-          error: 'Proof not found',
-        });
-      }
-
-      if (req.user.id === proof.intern_id) {
-        return reply.status(403).send({
-          error: 'Forbidden: you cannot verify your own proof submission',
-        });
-      }
-
-      if (req.user.role !== 'ADMIN') {
-        const hasAccess = await checkHierarchyAccess(
-          req.user.id,
-          proof.intern_id
-        );
-
-        if (!hasAccess) {
-          return reply.status(403).send({
-            error: 'Forbidden: not in intern hierarchy',
-          });
-        }
-      }
-
-      const task = await socialTasksRepo.getTaskById(proof.task_id);
-
-      if (!task) {
-        return reply.status(404).send({
-          error: 'Task not found',
-        });
-      }
-
-      if (!task.task_link) {
-        return reply.status(400).send({
-          error: 'Task does not have a proof URL',
-        });
-      }
-
-      // Verification is intentionally asynchronous:
-      // The reviewer request must not wait for crawling or AI verification.
-      void verificationService.enqueueProofVerification(proof.id, {
-        reviewer: req.user,
-      });
-
-      return reply.status(202).send({
-        success: true,
-        proofId: proof.id,
-        status: 'verification_started',
-        advisory: true,
-      });
-    } catch (err) {
-      req.log.error(err, 'Failed to start AI verification: ' + req.params.id);
-
-      return reply.status(500).send({
-        error: 'AI verification failed to start',
-      });
-    }
-  };
-
-  // AI-verify a submitted proof against its task link (verify now)
+  // AI-verify a submitted proof against its task link
   fastify.post(
     '/:id/ai-verify',
     {
@@ -129,20 +63,100 @@ async function routes(fastify) {
         params: toSchema(z.object({ id: z.string() })),
       },
     },
-    handleTriggerVerification
-  );
+    async (req, reply) => {
+      try {
+        const proof = await repo.getProof(req.params.id);
 
-  fastify.post(
-    '/:id/verify-now',
-    {
-      preHandler: [auth, rbac('CAPTAIN', 'TL', 'SENIOR_TL', 'ADMIN')],
-      schema: {
-        tags: ['Proofs'],
-        description: 'Reviewer trigger for asynchronous proof verification',
-        params: toSchema(z.object({ id: z.string() })),
-      },
-    },
-    handleTriggerVerification
+        if (!proof) {
+          return reply.status(404).send({
+            error: 'Proof not found',
+          });
+        }
+
+        const hasAccess = await checkHierarchyAccess(
+          req.user.id,
+          proof.intern_id
+        );
+
+        if (!hasAccess && req.user.role !== 'ADMIN') {
+          return reply.status(403).send({
+            error: 'Forbidden: not in intern hierarchy',
+          });
+        }
+
+        const task = await socialTasksRepo.getTaskById(proof.task_id);
+
+        if (!task) {
+          return reply.status(404).send({
+            error: 'Task not found',
+          });
+        }
+
+        if (!task.task_link) {
+          return reply.status(400).send({
+            error: 'Task does not have a proof URL',
+          });
+        }
+
+        /*
+         * Verification is intentionally asynchronous.
+         * The reviewer request must not wait for crawling or Gemini.
+         */
+        void (async () => {
+          try {
+            const crawlResult = await fetchProofContent(task.task_link);
+
+            if (!crawlResult.success) {
+              req.log.warn(
+                {
+                  proofId: proof.id,
+                  error: crawlResult.error,
+                },
+                'AI verification could not crawl proof URL'
+              );
+              return;
+            }
+
+            const verificationResult = await verifyClaim({
+              content: crawlResult.content,
+              claimedActions: {
+                did_comment: proof.did_comment,
+                did_repost: proof.did_repost,
+                did_share: proof.did_share,
+              },
+            });
+
+            await repo.saveVerificationResult(proof.id, verificationResult);
+
+            req.log.info(
+              {
+                proofId: proof.id,
+                verification: verificationResult,
+              },
+              'AI verification completed'
+            );
+          } catch (err) {
+            req.log.error(
+              err,
+              'Background AI verification failed: ' + proof.id
+            );
+          }
+        })();
+
+        return reply.status(202).send({
+          success: true,
+          proofId: proof.id,
+          status: 'verification_started',
+          advisory: true,
+        });
+      } catch (err) {
+        req.log.error(err, 'Failed to start AI verification: ' + req.params.id);
+
+        return reply.status(500).send({
+          error: 'AI verification failed to start',
+        });
+      }
+    }
   );
 
   // Get AI verification result for a proof
@@ -164,33 +178,22 @@ async function routes(fastify) {
           return reply.status(404).send({ error: 'Proof not found' });
         }
 
-        if (req.user.role !== 'ADMIN') {
-          const hasAccess = await checkHierarchyAccess(
-            req.user.id,
-            proof.intern_id
-          );
+        const hasAccess = await checkHierarchyAccess(
+          req.user.id,
+          proof.intern_id
+        );
 
-          if (!hasAccess) {
-            return reply.status(403).send({
-              error: 'Forbidden: not in intern hierarchy',
-            });
-          }
+        if (!hasAccess && req.user.role !== 'ADMIN') {
+          return reply.status(403).send({
+            error: 'Forbidden: not in intern hierarchy',
+          });
         }
 
-        const isPending = !proof.verification_result;
-        const isFailed = proof.verification_result?.status === 'failed';
-        const status = isPending
-          ? 'pending'
-          : isFailed
-            ? 'failed'
-            : 'completed';
-
-        return reply.send({
+        return {
           proofId: proof.id,
-          status,
           verification: proof.verification_result || null,
           advisory: true,
-        });
+        };
       } catch (err) {
         req.log.error(
           err,
@@ -211,77 +214,29 @@ async function routes(fastify) {
       preHandler: [auth, rbac('CAPTAIN', 'TL', 'SENIOR_TL', 'ADMIN'), sanitize],
       schema: {
         tags: ['Proofs'],
-        description: 'Verify or review a proof submission',
-        params: toSchema(z.object({ id: z.string() })),
-        body: toSchema(
-          z
-            .object({
-              status: z.enum(['VERIFIED', 'APPROVED', 'REJECTED']).optional(),
-            })
-            .optional()
-        ),
-      },
-    },
-    async (req, reply) => {
-      try {
-        const isRejection = req.body?.status === 'REJECTED';
-        const result = isRejection
-          ? await repo.rejectProof(req.params.id, req.user.id, req.user.role)
-          : await repo.verifyProof(req.params.id, req.user.id, req.user.role);
-        if (!result) {
-          return reply.status(404).send({ error: 'Proof not found' });
-        }
-
-        req.auditOnResponse = {
-          userId: req.user.id,
-          action: isRejection ? 'PROOF_REJECTED' : 'PROOF_VERIFIED',
-          resourceType: 'proof',
-          resourceId: result.id,
-        };
-
-        return result;
-      } catch (err) {
-        if (err.message === 'Proof not found') {
-          return reply.status(404).send({ error: 'Proof not found' });
-        }
-        if (err.message.startsWith('Forbidden')) {
-          return reply.status(403).send({ error: err.message });
-        }
-        throw err;
-      }
-    }
-  );
-
-  // Reject proof (Captain, TL, Senior TL) with ownership over the intern
-  fastify.patch(
-    '/:id/reject',
-    {
-      preHandler: [auth, rbac('CAPTAIN', 'TL', 'SENIOR_TL', 'ADMIN'), sanitize],
-      schema: {
-        tags: ['Proofs'],
-        description: 'Reject a proof submission',
+        description: 'Verify a proof submission',
         params: toSchema(z.object({ id: z.string() })),
       },
     },
     async (req, reply) => {
       try {
-        const rejected = await repo.rejectProof(
+        const verified = await repo.verifyProof(
           req.params.id,
           req.user.id,
           req.user.role
         );
-        if (!rejected) {
+        if (!verified) {
           return reply.status(404).send({ error: 'Proof not found' });
         }
 
         req.auditOnResponse = {
           userId: req.user.id,
-          action: 'PROOF_REJECTED',
+          action: 'PROOF_VERIFIED',
           resourceType: 'proof',
-          resourceId: rejected.id,
+          resourceId: verified.id,
         };
 
-        return rejected;
+        return verified;
       } catch (err) {
         if (err.message === 'Proof not found') {
           return reply.status(404).send({ error: 'Proof not found' });

@@ -1,4 +1,0 @@
-const EMAIL_MAX_LENGTH = 254;
-const PASSWORD_MAX_LENGTH = 128;
-
-module.exports = { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH };

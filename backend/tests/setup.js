@@ -1,4 +1,3 @@
-require('dotenv').config();
 jest.mock('argon2', () => {
   const mockImpl = {
     hash: jest.fn().mockImplementation(async (password) => {

@@ -105,7 +105,6 @@ export default function ResetPassword() {
                 <input
                   id="newPassword"
                   type="password"
-                  maxLength={128}
                   placeholder="New password (min 8)"
                   autoComplete="new-password"
                   value={newPassword}

@@ -4,8 +4,6 @@ const { v4: uuidv4 } = require('uuid');
 const config = require('../../config');
 const repo = require('./repository');
 const uploadRepo = require('../uploads/repository');
-const verificationService = require('./verification.service');
-const logger = require('../../logger');
 
 const ALLOWED_MIMES = ['image/jpeg', 'image/png', 'image/gif'];
 const ALLOWED_EXTS = ['.jpg', '.jpeg', '.png', '.gif'];
@@ -190,31 +188,11 @@ async function submitProof(
 
   const dbSavedPaths = await saveFiles(filesData);
 
-  const proof = await repo.submitProofWithImages(
-    task_id,
-    userId,
-    dbSavedPaths,
-    {
-      didComment,
-      didRepost,
-      didShare,
-    }
-  );
-
-  // Wire crawler + AI verification into proof-submission flow
-  // Non-blocking: background job is triggered without blocking the response
-  try {
-    verificationService.enqueueProofVerification(proof.id, {
-      isBackground: true,
-    });
-  } catch (enqueueErr) {
-    logger.error(
-      { err: enqueueErr, proofId: proof.id },
-      'Failed to enqueue proof verification'
-    );
-  }
-
-  return proof;
+  return repo.submitProofWithImages(task_id, userId, dbSavedPaths, {
+    didComment,
+    didRepost,
+    didShare,
+  });
 }
 
 /**

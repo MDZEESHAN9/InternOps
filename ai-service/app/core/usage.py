@@ -1,10 +1,8 @@
 """
-Daily AI usage tracking.
+Daily AI usage tracking — STUB.
 
-Delegates all usage-tracking operations to app.repositories.ai_repository.
-Usage is persisted in the `ai_usage` PostgreSQL table, keyed by
-(user_id, usage_date), and survives application restarts.
-
+TODO(usage): back with a real store (DB/Redis). Currently in-memory and
+resets on restart.
 """
 
 import os

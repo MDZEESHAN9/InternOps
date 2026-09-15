@@ -7,8 +7,7 @@ import {
   Copy,
   FileText,
 } from 'lucide-react';
-import { PageHeader, Card, Badge } from '../../components/ui';
-import { useRouteInitialLoading } from '../../components/loading/RouteInitialLoading';
+import { PageHeader, Card, Badge, Spinner } from '../../components/ui';
 import CustomDatePicker from '../../components/CustomDatePicker';
 import CustomSelect from '../../components/CustomSelect';
 import { useTemplates, useQuickGenerate } from '../../hooks/useCertificates';
@@ -55,10 +54,6 @@ export default function QuickGenerate() {
   const [error, setError] = useState(null);
 
   const { data: templatesData, isLoading: templatesLoading } = useTemplates();
-
-  const quickGenerateInitialLoading = templatesLoading && !templatesData;
-
-  useRouteInitialLoading(quickGenerateInitialLoading);
   const templates = templatesData?.data || [];
   const quickGenerateMutation = useQuickGenerate();
 
@@ -120,7 +115,7 @@ export default function QuickGenerate() {
     formData.end_date;
 
   return (
-    <div>
+    <div className="animate-fade-in-up">
       <PageHeader
         title="Quick Generate Certificate"
         icon={<Zap className="h-6 w-6" />}
@@ -142,15 +137,21 @@ export default function QuickGenerate() {
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
                     Template <span className="text-slate-400">(optional)</span>
                   </label>
-                  <CustomSelect
-                    value={formData.template_id}
-                    onChange={(value) =>
-                      setFormData((prev) => ({ ...prev, template_id: value }))
-                    }
-                    options={templateOptions}
-                    placeholder="Auto-select template"
-                    className="w-full"
-                  />
+                  {templatesLoading ? (
+                    <div className="flex items-center gap-2 text-slate-500 text-sm">
+                      <Spinner /> Loading templates...
+                    </div>
+                  ) : (
+                    <CustomSelect
+                      value={formData.template_id}
+                      onChange={(value) =>
+                        setFormData((prev) => ({ ...prev, template_id: value }))
+                      }
+                      options={templateOptions}
+                      placeholder="Auto-select template"
+                      className="w-full"
+                    />
+                  )}
                 </div>
 
                 {/* Name */}

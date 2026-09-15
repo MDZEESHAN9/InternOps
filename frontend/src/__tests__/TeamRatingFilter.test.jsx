@@ -1,7 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
 import Team from '../pages/Team';
 import api from '../lib/axios';
 import useAuthStore from '../store/auth';
@@ -76,17 +75,11 @@ describe('Team Page - Rating & Eligibility Filtering', () => {
       },
     });
 
-    const authState = {
-      accessToken: 'test-access-token',
-      hydrated: true,
-      user: {
-        id: 'admin-1',
-        role: 'ADMIN',
-        email: 'admin@example.com',
-      },
-    };
-
-    useAuthStore.mockImplementation((selector) => selector(authState));
+    useAuthStore.mockReturnValue({
+      id: 'admin-1',
+      role: 'ADMIN',
+      email: 'admin@example.com',
+    });
 
     api.get.mockImplementation((url) => {
       if (url === '/team/members') {
@@ -98,11 +91,9 @@ describe('Team Page - Rating & Eligibility Filtering', () => {
 
   const renderComponent = () =>
     render(
-      <MemoryRouter initialEntries={['/team']}>
-        <QueryClientProvider client={queryClient}>
-          <Team />
-        </QueryClientProvider>
-      </MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <Team />
+      </QueryClientProvider>
     );
 
   it('renders rating values and eligibility badges correctly in the table', async () => {

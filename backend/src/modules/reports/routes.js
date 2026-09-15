@@ -12,23 +12,16 @@ const REPORTS_COLUMN_MAP = {
   departmentId: 'd.id',
 };
 
-const dateRangeSchema = z
-  .object({
-    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD'),
-    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD'),
-  })
-  .refine((data) => data.from <= data.to, {
-    message: '"from" must be on or before "to"',
-    path: ['to'],
-  });
+const dateRangeSchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD'),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD'),
+});
 
 function parseDateRange(query) {
   const parsed = dateRangeSchema.safeParse(query);
 
   if (!parsed.success) {
-    const error = new Error(
-      parsed.error.issues[0]?.message || 'from and to are required (YYYY-MM-DD)'
-    );
+    const error = new Error('from and to are required (YYYY-MM-DD)');
     error.statusCode = 400;
     error.details = parsed.error.issues;
     throw error;
@@ -37,22 +30,17 @@ function parseDateRange(query) {
   return parsed.data;
 }
 
-const departmentQuerySchema = z
-  .object({
-    from: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD')
-      .optional(),
-    to: z
-      .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD')
-      .optional(),
-    departmentId: z.string().uuid().optional(),
-  })
-  .refine((data) => !data.from || !data.to || data.from <= data.to, {
-    message: '"from" must be on or before "to"',
-    path: ['to'],
-  });
+const departmentQuerySchema = z.object({
+  from: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be YYYY-MM-DD')
+    .optional(),
+  to: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be YYYY-MM-DD')
+    .optional(),
+  departmentId: z.string().uuid().optional(),
+});
 
 async function routes(fastify) {
   fastify.get(
@@ -67,11 +55,7 @@ async function routes(fastify) {
     },
     async (req, reply) => {
       const range = parseDateRange(req.query);
-
-      const departmentId =
-        req.user.role === 'ADMIN' ? null : req.user.departmentId;
-
-      return repo.attendanceSummaryByRole(range.from, range.to, departmentId);
+      return repo.attendanceSummaryByRole(range.from, range.to);
     }
   );
 
@@ -87,11 +71,7 @@ async function routes(fastify) {
     },
     async (req, reply) => {
       const range = parseDateRange(req.query);
-
-      const departmentId =
-        req.user.role === 'ADMIN' ? null : req.user.departmentId;
-
-      return repo.ratingsSummary(range.from, range.to, departmentId);
+      return repo.ratingsSummary(range.from, range.to);
     }
   );
 
@@ -101,11 +81,8 @@ async function routes(fastify) {
       preHandler: [auth, rbac('ADMIN', 'SENIOR_TL')],
       schema: { tags: ['Reports'], description: 'Task completion statistics' },
     },
-    async (req) => {
-      const departmentId =
-        req.user.role === 'ADMIN' ? null : req.user.departmentId;
-
-      return repo.taskCompletionStats(departmentId);
+    async () => {
+      return repo.taskCompletionStats();
     }
   );
 

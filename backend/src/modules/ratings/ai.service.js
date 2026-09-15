@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const config = require('../../config');
 const metrics = require('../../utils/metrics');
-const { safeParseJSON } = require('../../utils/promptCleaner');
+const { clean_and_parse_json } = require('../../utils/promptCleaner');
 
 let ratingsPrompt;
 try {
@@ -95,15 +95,7 @@ async function generateRatingSuggestion(data) {
   }
 
   const raw = result.response.text();
-  const parsed = safeParseJSON(raw);
-
-  if (!parsed) {
-    return {
-      source: 'ai',
-      suggestedScore: null,
-      feedback: 'Unable to parse AI response',
-    };
-  }
+  const parsed = clean_and_parse_json(raw);
 
   const score = Number(parsed.score);
   if (!Number.isInteger(score) || score < 1 || score > 10) {

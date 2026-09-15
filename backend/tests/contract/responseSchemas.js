@@ -63,13 +63,7 @@ module.exports = {
 
   'DELETE /api/v1/departments/:id': z.object({
     success: z.literal(true),
-    userCount: z.number().int().nonnegative(),
-    roleCounts: z.object({
-      SENIOR_TL: z.number().int().nonnegative(),
-      TL: z.number().int().nonnegative(),
-      CAPTAIN: z.number().int().nonnegative(),
-      INTERN: z.number().int().nonnegative(),
-    }),
+    force: z.boolean(),
   }),
 
   // Notifications

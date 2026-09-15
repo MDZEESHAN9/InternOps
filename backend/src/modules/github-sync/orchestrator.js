@@ -6,8 +6,6 @@ const logger = require('../../logger');
 let startupSyncDone = false;
 let periodicSyncTimer = null;
 let retryTimer = null;
-let startupSyncTimer = null;
-let initialized = false;
 let isSyncing = false;
 let isRetrying = false;
 
@@ -48,8 +46,7 @@ async function triggerStartupSync() {
     { repo: settings.repo },
     'Starting initial GitHub sync (delayed 10s after boot)'
   );
-  startupSyncTimer = setTimeout(async () => {
-    startupSyncTimer = null;
+  setTimeout(async () => {
     try {
       const results = await service.syncAllOpenIssues(settings.repo);
       logger.info({ results }, 'Startup GitHub sync completed');
@@ -183,51 +180,32 @@ function startRetryCycle() {
 }
 
 async function initialize() {
-  if (initialized) {
-    logger.info('GitHub sync orchestrator already initialized');
-    return;
-  }
-
   const enabled = await shouldRun();
   if (!enabled) {
     logger.info('GITHUB_ISSUE_SYNC disabled — sync orchestrator not starting');
     return;
   }
-
   const settings = await repo.getGithubSyncSettings();
   if (!settings || !settings.is_active) {
     logger.info(
       'GitHub sync not configured — orchestrator idle, waiting for config'
     );
   }
-
-  initialized = true;
-
-  await triggerStartupSync();
+  triggerStartupSync();
   startPeriodicSync();
   startRetryCycle();
-
   logger.info('GitHub sync orchestrator initialized');
 }
 
 function shutdown() {
-  if (startupSyncTimer) {
-    clearTimeout(startupSyncTimer);
-    startupSyncTimer = null;
-  }
-
   if (periodicSyncTimer) {
     clearInterval(periodicSyncTimer);
     periodicSyncTimer = null;
   }
-
   if (retryTimer) {
     clearInterval(retryTimer);
     retryTimer = null;
   }
-
-  initialized = false;
-
   logger.info('GitHub sync orchestrator shut down');
 }
 

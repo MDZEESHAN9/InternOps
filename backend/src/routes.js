@@ -1,5 +1,4 @@
 const noticesRoutes = require('./modules/notices/routes');
-const clientErrorRoutes = require('./modules/client-errors/routes');
 
 // ---------------------------------------------------------------------------
 // Deprecation header hook
@@ -37,7 +36,6 @@ module.exports = async function routes(fastify, opts) {
 
   fastify.register(require('./modules/auth/routes'), { prefix: '/auth' });
   fastify.register(require('./modules/users/routes'), { prefix: '/users' });
-  fastify.register(clientErrorRoutes, { prefix: '/client-error' });
   fastify.register(require('./modules/departments/routes'), {
     prefix: '/departments',
   });
@@ -45,7 +43,6 @@ module.exports = async function routes(fastify, opts) {
     prefix: '/hierarchy',
   });
   fastify.register(require('./modules/team/routes'), { prefix: '/team' });
-  fastify.register(require('./modules/hr/routes'), { prefix: '/hr' });
   fastify.register(require('./modules/attendance/routes'), {
     prefix: '/attendance',
   });
@@ -54,6 +51,9 @@ module.exports = async function routes(fastify, opts) {
   });
   fastify.register(require('./modules/social-tasks/routes'), {
     prefix: '/tasks',
+  });
+  fastify.register(require('./modules/onboarding/routes'), {
+    prefix: '/onboarding',
   });
   fastify.register(require('./modules/proof-submissions/routes'), {
     prefix: '/proofs',
@@ -64,12 +64,6 @@ module.exports = async function routes(fastify, opts) {
   fastify.register(require('./modules/audit/routes'), { prefix: '/audit' });
   fastify.register(require('./modules/uploads/routes'), {
     prefix: '/uploads',
-  });
-  fastify.register(require('./modules/workbook-imports/routes'), {
-    prefix: '/workbook-imports',
-  });
-  fastify.register(require('./modules/assessments/routes'), {
-    prefix: '/assessments',
   });
   fastify.register(require('./modules/analytics/routes'), {
     prefix: '/analytics',
@@ -83,19 +77,10 @@ module.exports = async function routes(fastify, opts) {
   fastify.register(require('./modules/reports/routes'), {
     prefix: '/reports',
   });
-  fastify.register(require('./modules/report-templates/routes'), {
-    prefix: '/report-templates',
-  });
   fastify.register(require('./modules/reports/export'), {
     prefix: '/reports/export',
   });
   fastify.register(require('./modules/ai/routes'), { prefix: '/ai' });
-  fastify.register(require('./modules/ai-performance/routes'), {
-    prefix: '/ai/performance',
-  });
-  fastify.register(require('./modules/onboarding/routes'), {
-    prefix: '/onboarding',
-  });
 
   fastify.register(require('./modules/uptoskills/routes'), {
     prefix: '/uptoskills',
@@ -114,10 +99,6 @@ module.exports = async function routes(fastify, opts) {
 
   fastify.register(require('./modules/github-sync/index'), {
     prefix: '/github',
-  });
-
-  fastify.register(require('./modules/internops/routes'), {
-    prefix: '/internops',
   });
 
   // Public certificate verification (no auth)

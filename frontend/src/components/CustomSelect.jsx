@@ -10,8 +10,6 @@ export default function CustomSelect({
   className = '',
   disabled = false,
   searchable = false,
-  autoSelectOnMatch = false,
-  wrapOptions = false,
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -32,25 +30,6 @@ export default function CustomSelect({
           option.label.toLowerCase().includes(search.trim().toLowerCase())
         )
       : options;
-
-  // When enabled, typing a search term that uniquely identifies a single
-  // option (e.g. an intern's name) immediately selects it — the caller
-  // doesn't need to click the option in the dropdown to see the result.
-  useEffect(() => {
-    if (!autoSelectOnMatch || !searchable) return;
-
-    const term = search.trim();
-    if (!term) return;
-
-    const matches = options.filter((option) =>
-      option.label.toLowerCase().includes(term.toLowerCase())
-    );
-
-    if (matches.length === 1 && matches[0].value !== value) {
-      onChange(matches[0].value);
-      setOpen(false);
-    }
-  }, [search, autoSelectOnMatch, searchable, options, value, onChange]);
 
   useEffect(() => {
     if (!open) {
@@ -168,13 +147,7 @@ export default function CustomSelect({
                     }`}
                   />
 
-                  <span
-                    className={`relative z-10 min-w-0 pl-1 ${
-                      wrapOptions
-                        ? 'whitespace-normal break-words py-1 leading-5'
-                        : 'truncate'
-                    }`}
-                  >
+                  <span className="relative z-10 truncate pl-1">
                     {option.label}
                   </span>
 
@@ -208,9 +181,7 @@ export default function CustomSelect({
           } disabled:opacity-60 disabled:cursor-not-allowed`}
         >
           <span
-            className={`${
-              selected ? '' : 'text-slate-400 dark:text-slate-500'
-            } ${wrapOptions ? 'whitespace-normal break-words py-2 leading-5' : ''}`}
+            className={selected ? '' : 'text-slate-400 dark:text-slate-500'}
           >
             {selected ? selected.label : placeholder}
           </span>

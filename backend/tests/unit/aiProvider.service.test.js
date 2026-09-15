@@ -47,7 +47,7 @@ jest.mock('../../src/config/redis', () => ({
 }));
 
 const mockFetch = jest.fn();
-jest.spyOn(global, 'fetch').mockImplementation(mockFetch);
+global.fetch = mockFetch;
 
 describe('AI Provider Service', () => {
   let aiService;
@@ -81,7 +81,7 @@ describe('AI Provider Service', () => {
 
     mockGetRedisClient.mockReset();
     mockFetch.mockReset();
-    jest.spyOn(global, 'fetch').mockImplementation(mockFetch);
+    global.fetch = mockFetch;
 
     aiService = require('../../src/services/aiProviderService');
   });
@@ -216,21 +216,33 @@ describe('AI Provider Service', () => {
 
     aiService = require('../../src/services/aiProviderService');
 
-    for (let i = 0; i < 4; i++) {
-      const res = await aiService.generateAIResponse({
+    await expect(
+      aiService.generateAIResponse({
         userId: 'user-3',
         messages: [{ role: 'user', content: 'Will fail' }],
-      });
-      expect(res).toMatchObject({
-        cached: false,
-        content: expect.stringContaining('temporarily unavailable'),
-        error: {
-          code: 'AI_SERVICE_UNAVAILABLE',
-          message: expect.any(String),
-          providers: expect.any(Array),
-        },
-      });
-    }
+      })
+    ).rejects.toThrow('All AI providers unavailable');
+
+    await expect(
+      aiService.generateAIResponse({
+        userId: 'user-3',
+        messages: [{ role: 'user', content: 'Will fail' }],
+      })
+    ).rejects.toThrow('All AI providers unavailable');
+
+    await expect(
+      aiService.generateAIResponse({
+        userId: 'user-3',
+        messages: [{ role: 'user', content: 'Will fail' }],
+      })
+    ).rejects.toThrow('All AI providers unavailable');
+
+    await expect(
+      aiService.generateAIResponse({
+        userId: 'user-3',
+        messages: [{ role: 'user', content: 'Will fail' }],
+      })
+    ).rejects.toThrow('All AI providers unavailable');
 
     expect(mockFetch).toHaveBeenCalledTimes(3);
   });
@@ -244,11 +256,12 @@ describe('AI Provider Service', () => {
 
     const hugeMessage = { role: 'user', content: 'x'.repeat(40000) };
 
-    const res = await aiService.generateAIResponse({
-      userId: 'user-4',
-      messages: [hugeMessage],
-    });
-    expect(res.error?.code).toBeDefined();
+    await expect(
+      aiService.generateAIResponse({
+        userId: 'user-4',
+        messages: [hugeMessage],
+      })
+    ).rejects.toThrow('All AI providers unavailable');
   });
 
   it('should recover and close the circuit breaker after the cooldown period (half-open)', async () => {
@@ -264,18 +277,18 @@ describe('AI Provider Service', () => {
 
       aiService = require('../../src/services/aiProviderService');
 
-      let res = await aiService.generateAIResponse({
-        userId: 'u1',
-        messages: [],
-      });
-      expect(res.error).toBeDefined();
-      res = await aiService.generateAIResponse({ userId: 'u1', messages: [] });
-      expect(res.error).toBeDefined();
+      await expect(
+        aiService.generateAIResponse({ userId: 'u1', messages: [] })
+      ).rejects.toThrow();
+      await expect(
+        aiService.generateAIResponse({ userId: 'u1', messages: [] })
+      ).rejects.toThrow();
 
       mockFetch.mockClear();
 
-      res = await aiService.generateAIResponse({ userId: 'u1', messages: [] });
-      expect(res.error).toBeDefined();
+      await expect(
+        aiService.generateAIResponse({ userId: 'u1', messages: [] })
+      ).rejects.toThrow();
       expect(mockFetch).not.toHaveBeenCalled();
 
       jest.advanceTimersByTime(5001);
@@ -348,24 +361,22 @@ describe('AI Provider Service', () => {
 
     aiService = require('../../src/services/aiProviderService');
 
-    const res = await aiService.generateAIResponse({
-      userId: 'user-diag',
-      messages: [{ role: 'user', content: 'hello' }],
-    });
+    let caught;
+    try {
+      await aiService.generateAIResponse({
+        userId: 'user-diag',
+        messages: [{ role: 'user', content: 'hello' }],
+      });
+    } catch (err) {
+      caught = err;
+    }
 
-    expect(res.error).toBeDefined();
-    expect(res.error.message).toBe(
-      'All configured AI providers are unavailable.'
-    );
-    expect(Array.isArray(res.error.providers)).toBe(true);
-    expect(res.error.providers).toEqual([
+    expect(caught).toBeDefined();
+    expect(caught.message).toBe('All AI providers unavailable');
+    expect(Array.isArray(caught.details)).toBe(true);
+    expect(caught.details).toEqual([
       { provider: 'gemini', reason: 'missing_api_key' },
-      {
-        provider: 'groq',
-        reason: 'groq unreachable',
-        code: 'AI_PROVIDER_NETWORK_ERROR',
-        statusCode: null,
-      },
+      { provider: 'groq', reason: 'groq unreachable' },
     ]);
 
     mockConfig.ai.geminiKey = 'gemini-key';
@@ -388,11 +399,9 @@ describe('AI Provider Service', () => {
 
     aiService._caches.get = jest.fn().mockReturnValue(undefined);
 
-    const res = await aiService.generateAIResponse({
-      userId: 'cache-test-user',
-      messages: [],
-    });
-    expect(res.error).toBeDefined();
+    await expect(
+      aiService.generateAIResponse({ userId: 'cache-test-user', messages: [] })
+    ).rejects.toThrow();
 
     expect(LRUCache).toHaveBeenCalledWith(
       expect.objectContaining({

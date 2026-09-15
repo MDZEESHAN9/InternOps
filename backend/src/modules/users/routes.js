@@ -9,67 +9,11 @@ const argon2 = require('argon2');
 const { z } = require('zod');
 const authRepo = require('../auth/repository');
 const { toSchema } = require('../../utils/schemaHelper');
-const { isValidStep, checkHierarchyAccess } = require('../../utils/hierarchy');
-const { PASSWORD_MAX_LENGTH } = require('../auth/passwordPolicy');
-
-const SENIOR_TL_MANAGEABLE_ROLES = new Set(['TL', 'CAPTAIN', 'INTERN']);
-const TL_MANAGEABLE_ROLES = new Set(['CAPTAIN', 'INTERN']);
-
-async function authorizeUserManagement(req, reply, targetUser, action) {
-  if (req.user.role === 'ADMIN') return true;
-
-  if (req.user.role === 'SENIOR_TL') {
-    const allowed =
-      req.user.id !== targetUser.id &&
-      req.user.departmentId &&
-      targetUser.department_id === req.user.departmentId &&
-      SENIOR_TL_MANAGEABLE_ROLES.has(targetUser.role);
-    if (!allowed) {
-      reply.status(403).send({ error: `Senior TL cannot ${action} this user` });
-      return false;
-    }
-    return true;
-  }
-
-  if (req.user.role === 'TL') {
-    // TL can only manage CAPTAIN and INTERN
-    if (!TL_MANAGEABLE_ROLES.has(targetUser.role)) {
-      reply.status(403).send({
-        error: `TL can only ${action} Captains and Interns`,
-      });
-      return false;
-    }
-
-    // TL cannot manage self
-    if (req.user.id === targetUser.id) {
-      reply.status(403).send({
-        error: `You cannot ${action} your own account`,
-      });
-      return false;
-    }
-
-    // TL must have hierarchy access
-    const ok = await checkHierarchyAccess(req.user.id, targetUser.id);
-    if (!ok) {
-      reply.status(403).send({
-        error: `TL cannot ${action} this user`,
-      });
-      return false;
-    }
-
-    return true;
-  }
-
-  reply.status(403).send({ error: `Cannot ${action} this user` });
-  return false;
-}
+const { isValidStep } = require('../../utils/hierarchy');
 
 const listUsersQuerySchema = z.object({
   search: z.string().trim().max(100).optional(),
   role: z.enum(['ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN', 'INTERN']).optional(),
-  department_id: z
-    .union([z.string().uuid(), z.literal('unassigned')])
-    .optional(),
   suspended: z
     .enum(['true', 'false'])
     .transform((value) => value === 'true')
@@ -78,15 +22,7 @@ const listUsersQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-const USER_ROLES = [
-  'ADMIN',
-  'MANAGEMENT',
-  'HR',
-  'SENIOR_TL',
-  'TL',
-  'CAPTAIN',
-  'INTERN',
-];
+const USER_ROLES = ['ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN', 'INTERN'];
 
 const updateUserSchema = z
   .object({
@@ -120,8 +56,8 @@ const isValidAvatarUrl = (val) => {
 };
 
 const changePasswordSchema = z.object({
-  oldPassword: z.string().max(PASSWORD_MAX_LENGTH),
-  newPassword: z.string().min(8).max(PASSWORD_MAX_LENGTH),
+  oldPassword: z.string(),
+  newPassword: z.string().min(8),
 });
 
 const updateProfileSchema = z.object({
@@ -147,10 +83,10 @@ async function routes(fastify) {
   fastify.get(
     '/',
     {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL')],
+      preHandler: [auth, rbac('ADMIN')],
       schema: {
         tags: ['Users'],
-        description: 'List users visible to the requester',
+        description: 'List all users (Admin only)',
         querystring: {
           type: 'object',
           properties: {
@@ -160,7 +96,6 @@ async function routes(fastify) {
               enum: ['ADMIN', 'SENIOR_TL', 'TL', 'CAPTAIN', 'INTERN'],
             },
             suspended: { type: 'string', enum: ['true', 'false'] },
-            department_id: { type: 'string' },
             page: { type: 'integer', minimum: 1, default: 1 },
             limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
           },
@@ -176,186 +111,20 @@ async function routes(fastify) {
         });
       }
 
-      const { search, role, suspended, department_id, page, limit } =
-        parsed.data;
+      const { search, role, suspended, page, limit } = parsed.data;
       const offset = (page - 1) * limit;
 
-      const result = await repo.listUsersPaginated({
+      return repo.listUsersPaginated({
         search,
         role,
         suspended,
         page,
         limit,
         offset,
-        departmentId:
-          req.user.role === 'ADMIN' ? undefined : req.user.departmentId,
-        filterDepartmentId:
-          req.user.role === 'ADMIN' ? department_id : undefined,
-        requesterId: req.user.id,
-        requesterRole: req.user.role,
-        requesterDepartmentId: req.user.departmentId,
       });
-
-      let manageableIds = new Set();
-      if (req.user.role === 'TL') {
-        manageableIds = new Set(await repo.listManageableUserIds(req.user.id));
-      }
-
-      result.data = result.data.map((user) => {
-        if (req.user.role === 'ADMIN') {
-          return { ...user, can_manage: user.id !== req.user.id };
-        }
-        if (req.user.role === 'SENIOR_TL') {
-          return {
-            ...user,
-            can_manage:
-              user.id !== req.user.id &&
-              user.department_id === req.user.departmentId &&
-              SENIOR_TL_MANAGEABLE_ROLES.has(user.role),
-          };
-        }
-        if (req.user.role === 'TL') {
-          return {
-            ...user,
-            can_manage:
-              user.id !== req.user.id &&
-              user.department_id === req.user.departmentId &&
-              TL_MANAGEABLE_ROLES.has(user.role) &&
-              manageableIds.has(user.id),
-          };
-        }
-        return { ...user, can_manage: false };
-      });
-
-      return result;
     }
   );
 
-  fastify.get(
-    '/department/:departmentId/members',
-    {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL')],
-      schema: {
-        tags: ['Users'],
-        params: {
-          type: 'object',
-          required: ['departmentId'],
-          properties: { departmentId: { type: 'string', format: 'uuid' } },
-        },
-      },
-    },
-    async (req, reply) => {
-      if (
-        req.user.role !== 'ADMIN' &&
-        req.user.departmentId !== req.params.departmentId
-      ) {
-        return reply.status(403).send({ error: 'Forbidden department' });
-      }
-      const members = (
-        await repo.listDepartmentMembers(req.params.departmentId)
-      ).rows;
-      if (req.user.role !== 'TL') return members;
-      const manageableIds = new Set(
-        await repo.listManageableUserIds(req.user.id)
-      );
-      return members.filter(
-        (member) => member.id === req.user.id || manageableIds.has(member.id)
-      );
-    }
-  );
-  fastify.patch(
-    '/:id/hierarchy',
-    {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL'), sanitize],
-      schema: {
-        tags: ['Users'],
-        body: {
-          type: 'object',
-          required: ['role', 'department_id'],
-          additionalProperties: false,
-          properties: {
-            role: { type: 'string', enum: ['TL', 'CAPTAIN', 'INTERN'] },
-            department_id: { type: 'string', format: 'uuid' },
-            captain_ids: {
-              type: 'array',
-              items: { type: 'string', format: 'uuid' },
-              default: [],
-            },
-            intern_ids: {
-              type: 'array',
-              items: { type: 'string', format: 'uuid' },
-              default: [],
-            },
-            assign_all_captains: { type: 'boolean', default: false },
-            assign_all_interns: { type: 'boolean', default: false },
-          },
-        },
-      },
-    },
-    async (req, reply) => {
-      const {
-        rows: [targetUser],
-      } = await repo.getUserById(req.params.id);
-      if (!targetUser)
-        return reply.status(404).send({ error: 'User not found' });
-      if (
-        !(await authorizeUserManagement(
-          req,
-          reply,
-          targetUser,
-          'manage hierarchy for'
-        ))
-      )
-        return;
-      if (req.user.role !== 'ADMIN') {
-        if (req.body.department_id !== req.user.departmentId) {
-          return reply
-            .status(403)
-            .send({ error: 'Cannot manage another department' });
-        }
-        if (req.user.role === 'TL' && req.body.role === 'TL') {
-          return reply
-            .status(403)
-            .send({ error: 'TL cannot assign the TL role' });
-        }
-        if (req.user.role === 'TL') {
-          const manageableIds = new Set(
-            await repo.listManageableUserIds(req.user.id)
-          );
-          const requestedIds = [
-            ...(req.body.captain_ids || []),
-            ...(req.body.intern_ids || []),
-          ];
-          if (requestedIds.some((id) => !manageableIds.has(id))) {
-            return reply.status(403).send({
-              error:
-                'TL can assign only users already inside the managed hierarchy',
-            });
-          }
-          if (req.body.assign_all_captains || req.body.assign_all_interns) {
-            return reply.status(403).send({
-              error: 'TL cannot bulk-assign all department members',
-            });
-          }
-        }
-      }
-      try {
-        return await repo.updateHierarchyAssignment({
-          userId: req.params.id,
-          role: req.body.role,
-          departmentId: req.body.department_id,
-          captainIds: req.body.captain_ids || [],
-          internIds: req.body.intern_ids || [],
-          assignAllCaptains: req.body.assign_all_captains || false,
-          assignAllInterns: req.body.assign_all_interns || false,
-        });
-      } catch (error) {
-        if (error.statusCode)
-          return reply.status(error.statusCode).send({ error: error.message });
-        throw error;
-      }
-    }
-  );
   // Get own profile
   fastify.get(
     '/me',
@@ -390,14 +159,14 @@ async function routes(fastify) {
     }
   );
 
-  // Update user (admin, senior TL, and TL)
+  // Update user (admin only)
   fastify.patch(
     '/:id',
     {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL'), sanitize],
+      preHandler: [auth, rbac('ADMIN'), sanitize],
       schema: {
         tags: ['Users'],
-        description: 'Update a managed user',
+        description: 'Update user (Admin only)',
         params: {
           type: 'object',
           required: ['id'],
@@ -437,63 +206,25 @@ async function routes(fastify) {
       if (!targetUser) {
         return reply.status(404).send({ error: 'User not found' });
       }
-      if (!(await authorizeUserManagement(req, reply, targetUser, 'edit'))) {
-        return;
-      }
 
       const data = { ...parsed.data };
-      if (req.user.role === 'SENIOR_TL') {
-        const unsafeFields = Object.keys(data).filter(
-          (field) => !['full_name', 'email', 'role'].includes(field)
-        );
-        if (unsafeFields.length) {
-          return reply.status(403).send({
-            error: 'Senior TL can edit only name, email, and allowed roles',
-          });
-        }
-        if (data.role && !['TL', 'CAPTAIN', 'INTERN'].includes(data.role)) {
-          return reply
-            .status(403)
-            .send({ error: 'Senior TL cannot assign this role' });
-        }
-      }
-      if (req.user.role === 'TL') {
-        const unsafeFields = Object.keys(data).filter(
-          (field) => !['full_name', 'email', 'role'].includes(field)
-        );
-        if (unsafeFields.length) {
-          return reply.status(403).send({
-            error: 'TL can edit only name, email, and allowed roles',
-          });
-        }
-        if (data.role && !['CAPTAIN', 'INTERN'].includes(data.role)) {
-          return reply
-            .status(403)
-            .send({ error: 'TL cannot assign this role' });
-        }
-      }
       if (data.email !== undefined) data.email = data.email.toLowerCase();
 
       const nextRole = data.role || targetUser.role;
 
       if (
-        data.role !== undefined &&
-        data.role !== targetUser.role &&
-        (data.role === 'SENIOR_TL' || targetUser.role === 'SENIOR_TL')
+        targetUser.role === 'ADMIN' &&
+        !targetUser.suspended &&
+        nextRole !== 'ADMIN'
       ) {
-        return reply.status(409).send({
-          error: 'Senior TL changes must use Departments → Replace Senior TL.',
-        });
-      }
-
-      if (
-        data.role !== undefined &&
-        data.role !== targetUser.role &&
-        (targetUser.role === 'ADMIN' || data.role === 'ADMIN')
-      ) {
-        return reply.status(409).send({
-          error: 'Admin role is protected and cannot be changed.',
-        });
+        const otherAdminCount = await repo.countOtherActiveAdmins(
+          req.params.id
+        );
+        if (otherAdminCount === 0) {
+          return reply.status(400).send({
+            error: 'Cannot demote the last active admin',
+          });
+        }
       }
 
       if (data.department_id) {
@@ -501,17 +232,6 @@ async function routes(fastify) {
         if (!department) {
           return reply.status(400).send({ error: 'Department not found' });
         }
-      }
-
-      if (
-        data.manager_id === null &&
-        targetUser.manager_id &&
-        (await repo.countDirectReports(req.params.id)) > 0
-      ) {
-        return reply.status(409).send({
-          error:
-            'Cannot remove this manager while active users report to them. Use the department TL handover workflow.',
-        });
       }
 
       if (data.manager_id !== undefined && data.manager_id !== null) {
@@ -555,16 +275,6 @@ async function routes(fastify) {
           resourceType: 'user',
           resourceId: req.params.id,
           details: { fields: Object.keys(data) },
-          oldValue: {
-            role: targetUser.role,
-            department_id: targetUser.department_id,
-            manager_id: targetUser.manager_id,
-          },
-          newValue: {
-            role: updatedUser.role,
-            department_id: updatedUser.department_id,
-            manager_id: updatedUser.manager_id,
-          },
         };
 
         return { message: 'User updated', user: updatedUser };
@@ -579,14 +289,14 @@ async function routes(fastify) {
     }
   );
 
-  // Suspend user
+  // Suspend / Activate / Soft delete (admin only)
   fastify.patch(
     '/:id/suspend',
     {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL'), sanitize],
+      preHandler: [auth, rbac('ADMIN'), sanitize],
       schema: {
         tags: ['Users'],
-        description: 'Suspend a managed user',
+        description: 'Suspend user (Admin only)',
         params: { type: 'object', properties: { id: { type: 'string' } } },
       },
     },
@@ -602,16 +312,14 @@ async function routes(fastify) {
         rows: [targetUser],
       } = await repo.getUserById(req.params.id);
 
-      if (!targetUser) {
-        return reply.status(404).send({ error: 'User not found' });
-      }
-      if (!(await authorizeUserManagement(req, reply, targetUser, 'suspend'))) {
-        return;
-      }
-      if (targetUser.role === 'ADMIN') {
-        return reply.status(409).send({
-          error: 'Admin accounts cannot be suspended.',
-        });
+      if (targetUser?.role === 'ADMIN') {
+        const adminCount = await repo.countOtherActiveAdmins(req.params.id);
+
+        if (adminCount === 0) {
+          return reply.status(400).send({
+            error: 'Cannot suspend the last active admin',
+          });
+        }
       }
 
       await repo.suspendUser(req.params.id);
@@ -627,33 +335,17 @@ async function routes(fastify) {
     }
   );
 
-  // Activate user
   fastify.patch(
     '/:id/activate',
     {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL'), sanitize],
+      preHandler: [auth, rbac('ADMIN'), sanitize],
       schema: {
         tags: ['Users'],
-        description: 'Activate a managed user',
+        description: 'Activate user (Admin only)',
         params: { type: 'object', properties: { id: { type: 'string' } } },
       },
     },
-    async (req, reply) => {
-      const {
-        rows: [targetUser],
-      } = await repo.getUserById(req.params.id);
-      if (!targetUser)
-        return reply.status(404).send({ error: 'User not found' });
-      if (
-        !(await authorizeUserManagement(req, reply, targetUser, 'activate'))
-      ) {
-        return;
-      }
-      if (targetUser.role === 'ADMIN') {
-        return reply.status(409).send({
-          error: 'Admin accounts cannot be activated through user management.',
-        });
-      }
+    async (req) => {
       await repo.activateUser(req.params.id);
 
       req.auditOnResponse = {
@@ -667,19 +359,13 @@ async function routes(fastify) {
     }
   );
 
-  // Soft-delete user
   fastify.delete(
     '/:id',
     {
-      preHandler: [auth, rbac('ADMIN', 'SENIOR_TL', 'TL')],
+      preHandler: [auth, rbac('ADMIN')],
       schema: {
         tags: ['Users'],
-        description: 'Remove and anonymize a managed user',
-        body: {
-          type: 'object',
-          additionalProperties: false,
-          properties: { confirmation: { type: 'string', maxLength: 255 } },
-        },
+        description: 'Soft-delete user (Admin only)',
         params: { type: 'object', properties: { id: { type: 'string' } } },
       },
     },
@@ -695,39 +381,26 @@ async function routes(fastify) {
         rows: [targetUser],
       } = await repo.getUserById(req.params.id);
 
-      if (!targetUser) {
-        return reply.status(404).send({ error: 'User not found' });
-      }
-      if (!(await authorizeUserManagement(req, reply, targetUser, 'delete'))) {
-        return;
-      }
-      if (targetUser.role === 'ADMIN') {
-        return reply.status(409).send({
-          error: 'Admin accounts cannot be removed.',
-        });
+      if (targetUser?.role === 'ADMIN') {
+        const adminCount = await repo.countOtherActiveAdmins(req.params.id);
+
+        if (adminCount === 0) {
+          return reply.status(400).send({
+            error: 'Cannot delete the last active admin',
+          });
+        }
       }
 
-      if (
-        req.body?.confirmation?.trim().toLowerCase() !==
-        targetUser.email.toLowerCase()
-      ) {
-        return reply.status(400).send({
-          error: 'Type the exact user email address to confirm account removal',
-          code: 'CONFIRMATION_MISMATCH',
-        });
-      }
-      const removedUser = await repo.safelyRemoveUser(req.params.id);
-      if (!removedUser)
-        return reply.status(404).send({ error: 'User not found' });
+      await repo.softDeleteUser(req.params.id);
 
       req.auditOnResponse = {
         userId: req.user.id,
-        action: 'USER_REMOVED',
+        action: 'USER_DELETED',
         resourceType: 'user',
         resourceId: req.params.id,
       };
 
-      return { message: 'User access removed and personal data anonymized' };
+      return { message: 'Soft-deleted' };
     }
   );
 
@@ -745,7 +418,7 @@ async function routes(fastify) {
     async (req, reply) => {
       const schema = z.object({
         oldPassword: z.string(),
-        newPassword: z.string().min(8).max(PASSWORD_MAX_LENGTH),
+        newPassword: z.string().min(8),
       });
 
       const { oldPassword, newPassword } = schema.parse(req.body);

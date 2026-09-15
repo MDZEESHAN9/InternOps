@@ -11,7 +11,6 @@ import {
   EmptyState,
   Spinner,
   Stars,
-  StatCard,
 } from '../components/ui';
 
 describe('Shared UI Components Test Suite', () => {
@@ -119,23 +118,5 @@ describe('Shared UI Components Test Suite', () => {
     const starContainer = screen.getByTitle('3');
     expect(starContainer).toBeInTheDocument();
     expect(starContainer.textContent).toBe('★★★★★');
-  });
-
-  // 12. StatCard
-  it('renders StatCard with value, label, sub, icon, and badge', () => {
-    render(
-      <StatCard
-        value="42"
-        label="Active Users"
-        sub="Updated recently"
-        badge={<span>+15%</span>}
-        icon={<span data-testid="test-icon">Icon</span>}
-      />
-    );
-    expect(screen.getByText('42')).toBeInTheDocument();
-    expect(screen.getByText('Active Users')).toBeInTheDocument();
-    expect(screen.getByText('Updated recently')).toBeInTheDocument();
-    expect(screen.getByText('+15%')).toBeInTheDocument();
-    expect(screen.getByTestId('test-icon')).toBeInTheDocument();
   });
 });

@@ -2,7 +2,7 @@ const nodemailer = require('nodemailer');
 const config = require('../config');
 const pool = require('../config/db');
 const logger = require('../logger');
-const { runRedisOperation } = require('../config/redis');
+const { getRedisClient } = require('../config/redis');
 const path = require('path');
 const fs = require('fs');
 
@@ -86,20 +86,14 @@ class EmailService {
   async _checkRateLimit(to) {
     const windowMs = config.email.rateLimitWindowMs || 60000;
     const max = config.email.rateLimitPerRecipient || 5;
-    const redisCount = await runRedisOperation(
-      'email rate limiting',
-      'using per-process in-memory counters',
-      async (redis) => {
-        const count = await redis.incr(`email_rl:${to}`);
-        if (count === 1) {
-          await redis.expire(`email_rl:${to}`, Math.ceil(windowMs / 1000));
-        }
-        return count;
-      }
-    );
+    const redis = await getRedisClient();
 
-    if (redisCount !== null) {
-      if (redisCount > max) {
+    if (redis) {
+      const count = await redis.incr(`email_rl:${to}`);
+      if (count === 1) {
+        await redis.expire(`email_rl:${to}`, Math.ceil(windowMs / 1000));
+      }
+      if (count > max) {
         throw new Error(`Rate limit exceeded for ${to}`);
       }
       return;

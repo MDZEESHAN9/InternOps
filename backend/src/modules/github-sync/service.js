@@ -40,7 +40,7 @@ function getDefaultRepo() {
   return process.env.GITHUB_DEFAULT_REPO || 'rajat-wyrm/InternOps';
 }
 
-function verifyWebhookSignature(rawBody, signatureHeader) {
+function verifyWebhookSignature(payload, signatureHeader) {
   const secret = getWebhookSecret();
   if (!secret) {
     return false;
@@ -53,11 +53,7 @@ function verifyWebhookSignature(rawBody, signatureHeader) {
     : signatureHeader;
   const expected = crypto
     .createHmac('sha256', secret)
-    .update(
-      typeof rawBody === 'string' || Buffer.isBuffer(rawBody)
-        ? rawBody
-        : JSON.stringify(rawBody)
-    )
+    .update(typeof payload === 'string' ? payload : JSON.stringify(payload))
     .digest('hex');
   if (sig.length !== expected.length) {
     return false;
