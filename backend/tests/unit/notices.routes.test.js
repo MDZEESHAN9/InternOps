@@ -14,9 +14,7 @@ jest.mock('../../src/middleware/auth', () =>
   })
 );
 
-jest.mock('../../src/middleware/rbac', () =>
-  jest.fn(() => async () => {})
-);
+jest.mock('../../src/middleware/rbac', () => jest.fn(() => async () => {}));
 
 describe('Notice Routes', () => {
   let app;
