@@ -119,14 +119,7 @@ function toCsv(rows) {
     'internship_status',
   ];
 
-  const extraHeaders = [
-    'Domain',
-    'Attendance',
-    'Rating',
-    'Tasks',
-    'Proofs Pending',
-    'Status',
-  ];
+  const extraHeaders = ['Attendance', 'Rating', 'Tasks', 'Proofs Pending'];
 
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const header = [...cols, ...extraHeaders].join(',');
@@ -151,12 +144,10 @@ function toCsv(rows) {
 
       const values = [
         ...cols.map((c) => r[c]),
-        r.internship_domain || '—',
         attendance,
         rating,
         `${r.verified_tasks ?? 0}/${r.total_tasks ?? 0}`,
         Number(r.pending_proofs) || 0,
-        r.suspended ? 'Suspended' : r.internship_status || 'ACTIVE',
       ];
 
       return values.map(esc).join(',');
