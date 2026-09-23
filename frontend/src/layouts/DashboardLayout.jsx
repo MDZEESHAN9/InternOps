@@ -49,7 +49,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import api from '../lib/axios';
 import { resolveUploadUrl } from '../lib/uploadUrl';
-import { connectSocket, disconnectSocket } from '../lib/socket';
+
 import { UserAvatar, ConfirmationModal } from '../components/ui';
 import useAuthStore from '../store/auth';
 import useFeatureFlagsStore from '../store/featureFlags';
@@ -347,7 +347,9 @@ export default function DashboardLayout() {
   useEffect(() => {
     if (!accessToken || user?.mustChangePassword) return undefined;
 
-    const socket = connectSocket(accessToken);
+    let cancelled = false;
+    let socket = null;
+    let disconnect = null;
 
     const handleNotificationReceived = (payload) => {
       if (typeof payload?.unreadCount === 'number') {
@@ -363,11 +365,17 @@ export default function DashboardLayout() {
       });
     };
 
-    socket?.on('notification-received', handleNotificationReceived);
+    import('../lib/socket').then(({ connectSocket, disconnectSocket }) => {
+      if (cancelled) return;
+      disconnect = disconnectSocket;
+      socket = connectSocket(accessToken);
+      socket?.on('notification-received', handleNotificationReceived);
+    });
 
     return () => {
+      cancelled = true;
       socket?.off('notification-received', handleNotificationReceived);
-      disconnectSocket();
+      disconnect?.();
     };
   }, [accessToken, queryClient, user?.mustChangePassword]);
 
